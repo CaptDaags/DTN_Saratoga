@@ -1,0 +1,585 @@
+                       Example _get_ transaction sequence   
+		File-Receiver               	File-Sender
+
+         	GET REQUEST --------------------->
+         		(indicates acceptance) <------ STATUS
+                                <-------  METADATA
+                 		<----------------------  DATA #1
+            STATUS -----------------> (voluntarily sent at start)
+                            (lost) <------   DATA #2
+                 		<----------------------  DATA #3 
+				(bit set requesting STATUS)
+            STATUS ----------------->
+         	(indicating that range in DATA #2 was lost)
+                 		<----------------------- DATA #2 
+				(bit set requesting STATUS)
+            STATUS ----------------->
+         	(complete file and METADATA received)
+
+
+		Example PUT transaction sequence
+            File-Sender           		File-Receiver
+
+            METADATA ---------------->
+            DATA  #1 ---------------->
+                    (transfer accepted) <---------- STATUS
+            DATA  #2 ---> (lost)
+            DATA  #3  ------------>
+            (bit set requesting STATUS)
+                      (DATA #2 lost) <---------- STATUS
+            DATA  #2  ------------>
+            (bit set requesting STATUS)
+                    (transfer complete) <---------- STATUS
+
+TRANSACTIONS:
+
+      +---+-------------+-------------------------------------------+
+      | #  | Type         | Use              	                    |
+      +---+-------------+-------------------------------------------+
+      | 0 | BEACON      | Beacon packet indicating peer status      |
+      | 1 | REQUEST     | Commands peer to start a transfer         |
+      | 2 | METADATA    | Carries file transfer metadata            |
+      | 3 | DATA        | Carries octets of file data               |
+      | 4 | STATUS      | Signals list of unreceived data to sender |
+      |   |             | and errors between sender and receiver    |
+      +---+-------------+-------------------------------------------+
+
+
+SARATOGA UDP HEADER:
+                       1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
+   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |       UDP source port         |     UDP destination port      |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          UDP length           |         UDP checksum          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |Ver|Packet Type| other Saratoga fields ... //
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+//
+
+
+BEACON PACKET TYPE 0:
+
+    0	1                   2                   3   
+   |0 1 2 3|4 5 6 7|8 9 0 1|2 3 4 5|6 7 8 9|0 1 2 3|4 5 6 7|8 9 0 1|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |0 0 1|0 0 0 0 0|        Flags                                  |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   [[     Available free space (optional)                         ]]
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          Endpoint Identifier ...          //
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+//
+
+	Flags:
+ 	+-------+-------+-------------------------+-------------------+
+   	| Bit 8 | Bit 9 | Supported Field Sizes   | Maximum File Size |  Flags
+   	+-------+-------+-------------------------+-------------------+
+   	| 0     | 0     | 16 bits                 | 2^16 - 1 octets.  | 0x000000
+   	| 0     | 1     | 16 or 32 bits           | 2^32 - 1 octets.  | 0x400000
+   	| 1     | 0     | 16, 32, or 64 bits      | 2^64 - 1 octets.  | 0x800000
+   	| 1     | 1     | 16, 32, 64, or 128 bits | 2^128 - 1 octets. | 0xC00000
+   	+-------+-------+-------------------------+-------------------+
+   	
+	+-----+-------+-----------------------------------------------------+
+   	| Bit | Value | Meaning                                             |
+   	+-----+-------+-----------------------------------------------------+
+   	| 10  | 0     | not able to pass bundles to a local bundle agent;   |
+   	|     |       | handles files.                                      |
+   	| 10  | 1     | can pass marked bundles to a local bundle agent.    | 0x200000
+   	+-----+-------+-----------------------------------------------------+
+       +-----+-------+--------------------------------------+
+       | Bit | Value | Meaning                              |
+       +-----+-------+--------------------------------------+
+       | 11  | 0     | not capable of supporting streaming. |
+       | 11  | 1     | capable of supporting streaming.     | 0x100000
+       +-----+-------+--------------------------------------+
++--------+--------+------------------------------------------------+
+| Bit 12 | Bit 13 | Capability and willingness to send files       |
++--------+--------+------------------------------------------------+
+| 0      | 0      | cannot send files at all.                      | 0x000000
+| 0      | 1      | invalid.                                       | 0x040000
+| 1      | 0      | capable of sending, but not willing right now. | 0x080000
+| 1      | 1      | capable of and willing to send files.          | 0x0C0000
++--------+--------+------------------------------------------------+
++--------+--------+-------------------------------------------------+
+| Bit 14 | Bit 15 | Capability and willingness to receive files     |
++--------+--------+-------------------------------------------------+
+| 0      | 0      | cannot receive files at all.                    | 0x000000
+| 0      | 1      | invalid.                                        | 0x010000
+| 1      | 0      | capable of receiving, but will reject METADATA. | 0x020000
+| 1      | 1      | capable of and willing to receive files.        | 0x030000
++--------+--------+-------------------------------------------------+
++-----+-------+-----------------------------------------------------+
+| Bit | Value | Meaning                                             |
++-----+-------+-----------------------------------------------------+
+| 16  | 0     | supports DATA transfers over UDP only.              |
+| 16  | 1     | supports DATA transfers over both UDP and UDP-Lite. | 0x008000
++-----+-------+-----------------------------------------------------+
++-----+-------+-----------------------------------------------------+ 
+| Bit | Value | Meaning                                             | 
++-----+-------+-----------------------------------------------------+ 
+| 17  | 0     | available free space is not advertised in this      | 
+|     |       | BEACON.                                             | 
+| 17  | 1     | available free space is advertised in this BEACON.  | 0x004000
++-----+-------+-----------------------------------------------------+ 
++--------+--------+--------------------------+ 
+| Bit 18 | Bit 19 | Size of free space field | 
++--------+--------+--------------------------+ 
+| 0      | 0      | 16 bits.                 | 0x000000
+| 0      | 1      | 32 bits.                 | 0x001000
+| 1      | 0      | 64 bits.                 | 0x002000
+	| 1      | 1      | 128 bits.                | 0x003000
++--------+--------+--------------------------+ 
+REQUEST PACKET TYPE 1: command to perform either a _get_, _getdir_, or _delete_ transaction.
+
+    0                   1                   2                   3
+   |0 1 2 3|4 5 6 7|8 9 0 1|2 3 4 5|6 7 8 9|0 1 2 3|4 5 6 7|8 9 0 1|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |0 0 1|0 0 0 0 1|        Flags                  | Request-type  |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                               Id                              |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                 variable-length File Path ...                 /
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   /                                                               /
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   /               |    null byte    |                             /
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   /     variable-length Authentication Field (optional)   |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+	Flags:
+ 	+-------+-------+-------------------------+-------------------+
+   	| Bit 8 | Bit 9 | Supported Field Sizes   | Maximum File Size |  Flags
+   	+-------+-------+-------------------------+-------------------+
+   	| 0     | 0     | 16 bits                 | 2^16 - 1 octets.  | 0x000000
+   	| 0     | 1     | 16 or 32 bits           | 2^32 - 1 octets.  | 0x400000
+   	| 1     | 0     | 16, 32, or 64 bits      | 2^64 - 1 octets.  | 0x800000
+   	| 1     | 1     | 16, 32, 64, or 128 bits | 2^128 - 1 octets. | 0xC00000
+   	+-------+-------+-------------------------+-------------------+
+  	+-----+-------+-----------------------------------------------------+
+| Bit | Value | Meaning                                             |
++-----+-------+-----------------------------------------------------+
+| 10  | 0     | The requester cannot handle bundles locally.        |
+| 10  | 1     | The requester can handle bundles.                   |
+| 11  | 0     | The requester cannot receive streams.               |
+| 11  | 1     | The requester is also able to receive streams.      |
+| 16  | 0     | The requester is able to receive DATA over UDP      |
+|     |       | only.                                               |
+| 16  | 1     | The requester is also able to receive DATA over     |
+|     |       | UDP-Lite.                                           |
++-----+-------+-----------------------------------------------------+
+
+Transaction keys
++-----+-------+-----------------------------------------------------+
+| Bit | Value | Key         | Purpose                               |
++-----+-------+-----------------------------------------------------+
+| 10  | 0     | {bundles}   | Not a bundle.                         |
+| 11  | 0     | {streams}   | Not a stream.                         |
+| 16  | 1     | {UDPlite}   | Receive DATA over UDP-Lite.           |
++-----+-------+-----------------------------------------------------+
+
+Request Type (bits 24-31)
++----------+--------+----------------------------------------------------------------+
+| Value    |Command | Meaning                                                        |
++---+------+--------+----------------------------------------------------------------+
+| 0 | 0000 |        | No action is to be taken; similar to a BEACON.                 |
+| 1 | 0001 |'get'   | A _get_ transaction is requested.  The File Path field holds   |
+   	|   |      |        | the name of the file to be sent.                               |
+	| 2 | 0010 |'put'   | A _put_ transaction is requested.  The File Path field suggests|
+   	|   |      |        | the name of the file that will be delivered only after an OK   |
+|   |      |        | STATUS is received from the file receiver.                     |
+   	| 3 | 0011 |'take'  | A _get_ transaction is requested and once received the original|
+   	|   |      |        | copy should be deleted.  The File Path field holds the name of |
+   	|   |      |        | the file to be sent. (This get+delete is known as a 'take'.)   |
+   	| 4 | 0100 |'give'  | A _put_ transaction is requested, and once sent successfully,  |
+   	|   |      |        | the original copy will be deleted.  The File Path field holds  |
+   	|   |      |        | the name of the file to be sent.(This put+delete is known as a |
+   	|   |      |        | 'give'.)                                                       |
+   	| 5 | 0101 |'delete'| A _delete_ transaction is requested, and the File Path field   |
+   	|   |      |        | specifies the name of the file or directory to be deleted.     |
+    	| 6 | 0110 |'getdir'| A _getdir_ transaction is requested.  The File Path field holds|
+|   |      |        | the name of the directory to be examined.                      |      	
+        +------------------------------------------------------------------------------------+
+METADATA PACKET TYPE 2: command to either acknowledge a _get_, or _getdir_ REQUEST, or to initiate a
+   			  _put_ transaction.
+
+    0                   1                   2                   3
+   |0 1 2 3|4 5 6 7|8 9 0 1|2 3 4 5|6 7 8 9|0 1 2 3|4 5 6 7|8 9 0 1|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |0 0 1|0 0 0 1 0|        Flags                  |Sumleng|Sumtype|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                               Id                              |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               /
+   /                                                               /
+   /     example error-detection checksum 			        /
+   /                                                               /
+   /                                                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               /
+   /            single Directory Entry describing file             /
+   /                      (variable length)                        /
+   /                                                              //
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-//
+
+	Bits 8 & 9, set the transfer descriptor size in the METADATA packet.
+ 	+-------+-------+-------------------------+-------------------+
+   	| Bit 8 | Bit 9 | xfer desc Field Sizes   | Maximum File Size |  Flags
+   	+-------+-------+-------------------------+-------------------+
+   	| 0     | 0     | 16 bits                 | 2^16 - 1 octets.  | 0x000000
+   	| 0     | 1     | 16 or 32 bits           | 2^32 - 1 octets.  | 0x400000
+   	| 1     | 0     | 16, 32, or 64 bits      | 2^64 - 1 octets.  | 0x800000
+   	| 1     | 1     | 16, 32, 64, or 128 bits | 2^128 - 1 octets. | 0xC00000
+   	+-------+-------+-------------------------+-------------------+
+  	+--------+--------+-------------------------------------------------+
+| Bit 10 | Bit 11 | Type of transfer                                |
++--------+--------+-------------------------------------------------+
+| 0      | 0      | a file is being sent.                           |
+| 0      | 1      | the file being sent should be interpreted as a  |
+|        |        | directory record.                               |
+| 1      | 0      | a bundle is being sent.                         |
+| 1      | 1      | an indefinite-length stream is being sent.      |
++--------+--------+-------------------------------------------------+
+
+Only For Streams!
++-----+-------+-----------------------------------------------------+
+| Bit | Value | Meaning                                             |
++-----+-------+-----------------------------------------------------+
+| 12  | 0     | This transfer is in progress.                       |
+| 12  | 1     | This transfer is no longer in progress, and has     |
+|     |       | been terminated.                                    |
++-----+-------+-----------------------------------------------------+
++--------+----------------------------------------------------------+
+| Bit 13 | Use                                                      |
++--------+----------------------------------------------------------+
+| 0      | This file's content MUST be delivered reliably without   |
+|        | errors using UDP.                                        |
+| 1      | This file's content MAY be delivered unreliably, without |
+|        | errors, or partly unreliably, where errors are           |
+|        | tolerated, using UDP-Lite.                               |
++--------+----------------------------------------------------------+
++-----------+-------------------------------------------------------+
+   	| Sumlength | Use                                                   |
+   	| bits 24-27|                                                       |
+   	+-----------+-------------------------------------------------------+
+   	| 0         | No checksum is provided.                              |
+   	| 1         | 32-bit field, e.g.  CRC32.                            |
+   	| 4         | 128-bit field e.g.  MD5.                              |
+   	| 5         | 160-bit field e.g.  SHA-1.                            |
+   	+-----------+-------------------------------------------------------+
++-----------+-------------------------------------------------------+
+| Sumtype   | Use                                                   |
+| bits 28-31|                                                       |
++-----------+-------------------------------------------------------+
+| 0         | No checksum is provided.                              |
+| 1         | 32-bit CRC32 checksum, suitable for small files.      |
+| 2         | 128-bit MD5 checksum, suitable for larger files       |
+| 3         | 160-bit SHA-1 checksum, suitable for larger files but |
+|           | slower to process than MD5.                           |
++-----------+-------------------------------------------------------+
+
+ Directory Entry Format
+
+    0                   1                   2                   3 
+   |0 1 2 3|4 5 6 7|8 9 0 1|2 3 4 5|6 7 8 9|0 1 2 3|4 5 6 7|8 9 0 1|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |1|       Properties            [        Size (descriptor)      ]         
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |                          Mtime                                | 
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |                          Ctime                                | 
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |                                                               / 
+   +                                                               / 
+   /                                                               / 
+   /           File Path (max 1024 octets,variable length)         / 
+   /                                                          ... // 
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-// 
+
+   +------------+----------------------------------------------------------------------------------+ 
+   | field      | description                                                                      | 
+   +------------+----------------------------------------------------------------------------------+ 
+   | Properties | if set, bit 7 of this field indicates that the entry corresponds to a directory. | 
+   |            | Bit 6, if set, indicates that the file is "special".  A special file may not be  |
+   |            | directly transferable as it corresponds to a symbolic link, a named pipe, a      | 
+   |            | device node, or some other "special" filesystem object.  A file-sender may simply|
+   |            | choose not to include these types of files in the results of a _getdir_ request. | 
+   |            | Bits 8 and 9 are flags that indicate the width of the following descriptor field | 
+   |            | that gives file size.  Bit 10 indicates that the file is to be handled by        | 
+   |            | Saratoga as a bundle, and passed to a bundle agent.                              | 
+   | Size       | the size of each file or directory in octets.  This is a descriptor, varying as  | 
+   |            | needed in each entry for the size of the file.  For convenience in the figure, it| 
+   |            | is shown here as a 16-bit descriptor for a small file.                           | 
+   | Mtime      | a timestamp showing when the file or directory was modified.                     |                                       
+   | Ctime      | a timestamp of the last status change for this file or directory.                |                                        
+   | File Path  | contains the file's name relative within the requested path of the _getdir_      |
+   |            | a transaction, maximum of 1024-octet UTF-8 string, that is  null-terminated to   |                      
+   |            | to indicate the beginning of the next directory entry in _getdir_ results        |
+   +------------+----------------------------------------------------------------------------------+
+
+   +-------+-------+-------------------------------------------------+ 
+   | Bit 6 | Bit 7 | Properties conveyed                             |
+   +-------+-------+-------------------------------------------------+ 
+   | 0     | 0     | normal file.                                    |
+   | 0     | 1     | normal directory.                               |
+   | 1     | 0     | special file.                                   |
+   | 1     | 1     | special directory.                              |
+   +-------+-------+-------------------------------------------------+ 
+   | Bit 8 | Bit 9 | Properties conveyed                             | 
+   +-------+-------+-------------------------------------------------+ 
+   | 0     | 0     | File size is indicated in a 16-bit descriptor.  | 
+   | 0     | 1     | File size is indicated in a 32-bit descriptor.  | 
+   | 1     | 0     | File size is indicated in a 64-bit descriptor.  | 
+   | 1     | 1     | File size is indicated in a 128-bit descriptor. | 
+   +-------+-------+-------------------------------------------------+ 
+   +--------+--------------------------------------------------------------------------+ 
+   | Bit 10 | Properties conveyed                                                      | 
+   +--------+--------------------------------------------------------------------------+ 
+   | 0      | File really is a file.                                                   | 
+   | 1      | File is to be treated as a bundle.                                       | 
+   +--------+--------------------------------------------------------------------------+ 
+   | Bit 13 | Use                                                                      | 
+   +--------+--------------------------------------------------------------------------+ 
+   | 0      | This file's content MUST be delivered reliably without errors using UDP. | 
+   | 1      | This file's content MAY be delivered unreliably, or partly unreliably,   |
+   |        | where errors are tolerated, using UDP-Lite.                              |
++--------+--------------------------------------------------------------------------+ 
+DATA PACKET TYPE 3: The data transfer response to a _get_, _put_, or _getdir_ request.
+
+    0                   1                   2                   3
+   |0 1 2 3|4 5 6 7|8 9 0 1|2 3 4 5|6 7 8 9|0 1 2 3|4 5 6 7|8 9 0 1|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |0 0 1|0 0 0 1 1|         Flags                                 |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                               Id                              |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               /
+   /            Timestamp/nonce information (optional)             /
+   /                                                               /
+   /                                                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   [                      Offset (descriptor)                      ]
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+	Flags:
+ 	+-------+-------+-------------------------+-------------------+
+   	| Bit 8 | Bit 9 | Supported Field Sizes   | Maximum File Size |  Flags
+   	+-------+-------+-------------------------+-------------------+
+   	| 0     | 0     | 16 bits                 | 2^16 - 1 octets.  | 0x000000
+   	| 0     | 1     | 16 or 32 bits           | 2^32 - 1 octets.  | 0x400000
+   	| 1     | 0     | 16, 32, or 64 bits      | 2^64 - 1 octets.  | 0x800000
+   	| 1     | 1     | 16, 32, 64, or 128 bits | 2^128 - 1 octets. | 0xC00000
+   	+-------+-------+-------------------------+-------------------+
+  
++--------+--------+-------------------------------------------------+
+| Bit 10 | Bit 11 | Type of transfer                                |
++--------+--------+-------------------------------------------------+
+| 0      | 0      | a file is being sent.                           |
+| 0      | 1      | the file being sent should be interpreted as a  |
+|        |        | directory record.                               |
+| 1      | 0      | a bundle is being sent.                         |
+| 1      | 1      | an indefinite-length stream is being sent.      |
++--------+--------+-------------------------------------------------+
+
++-----+-------+-----------------------------------------------------+
+| Bit | Value | Meaning                                             |
++-----+-------+-----------------------------------------------------+
+| 12  | 0     | This packet does not include an optional            |
+|     |       | timestamp/nonce field.                              |
+| 12  | 1     | This packet includes an optional timestamp/nonce    |
+|     |       | field.                                              |
++-----+-------+-----------------------------------------------------+
+
++-----+-------+------------------------------------+
+| Bit | Value | Meaning                            |
++-----+-------+------------------------------------+
+| 15  | 0     | No response is requested.          |
+| 15  | 1     | A HOLESTOFILL packet is requested. |
++-----+-------+------------------------------------+
+
++-----+-------+----------------------------------+ 
+| Bit | Value | Meaning                          | 
++-----+-------+----------------------------------+ 
+| 16  | 0     | Normal use.                      | 
+| 16  | 1     | The EOD End of Data flag is set. | 
++-----+-------+----------------------------------+ 
+
+STATUS PACKET TYPE 4: 
+
+    0                   1                   2                   3
+   |0 1 2 3|4 5 6 7|8 9 0 1|2 3 4 5|6 7 8 9|0 1 2 3|4 5 6 7|8 9 0 1|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |0 0 1|0 0 1 0 0|        Flags                  |     Status    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                Id                             |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               /
+   /             Timestamp/nonce information (optional)            /
+   /                                                               /
+   /                                                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   [                Progress Indicator (descriptor)                ]
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   [                 In-Response-To (descriptor)                   ]
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |               (possibly, several Hole fields)                 /
+   /                              ...                              /
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+	Flags:
+ 	+-------+-------+-------------------------+-------------------+
+   	| Bit 8 | Bit 9 | Set descriptor  Sizes   | Maximum File Size |  Flags
+   	+-------+-------+-------------------------+-------------------+
+   	| 0     | 0     | 16 bits                 | 2^16 - 1 octets.  | 0x000000
+   	| 0     | 1     | 16 or 32 bits           | 2^32 - 1 octets.  | 0x400000
+   	| 1     | 0     | 16, 32, or 64 bits      | 2^64 - 1 octets.  | 0x800000
+   	| 1     | 1     | 16, 32, 64, or 128 bits | 2^128 - 1 octets. | 0xC00000
+   	+-------+-------+-------------------------+-------------------+
+  
++-----+-------+---------------------------------------------------+
+| Bit | Value | Meaning                                           |
++-----+-------+---------------------------------------------------+
+| 12  | 0     | This packet does not include a timestamp field.   |
+| 12  | 1     | This packet includes an optional timestamp field. |
++-----+-------+---------------------------------------------------+
+
++-----+-------+----------------------------------------+
+| Bit | Value | Meaning                                |
++-----+-------+----------------------------------------+
+| 13  | 0     | file's METADATA has been received.     |
+| 13  | 1     | file's METADATA has not been received. |
++-----+-------+----------------------------------------+
+
++-----+-------+-----------------------------------------------------+
+| Bit | Value | Meaning                                             |
++-----+-------+-----------------------------------------------------+
+| 14  | 0     | this packet contains the complete current set of    |
+|     |       | holes at the file-receiver.                         |
+| 14  | 1     | this packet contains incomplete hole-state; holes   |
+|     |       | shown in this packet should supplement other        |
+|     |       | incomplete hole-state known to the file-sender.     |
++-----+-------+-----------------------------------------------------+
+
++-----+-------+----------------------------------------------------+
+| Bit | Value | Meaning                                            |
++-----+-------+----------------------------------------------------+
+| 15  | 0     | This STATUS was requested by the file-sender.      |
+| 15  | 1     | This STATUS is sent voluntarily.                   |
++-----+-------+----------------------------------------------------+
+
+  
+ Hole Definition Format
+
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   [             offset to start of hole (descriptor)              ]
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   [              offset to end of hole (descriptor)               ]
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+
+   +--------------+--------+-------+--------------------------------------------------+ 
+   | Error Code   |  End   | Rcvd  | Meaning                                          | 
+   | Status Value | Action |  by*  |                                                  | 
+   +--------------+--------+-------+--------------------------------------------------+ 
+   | 0x00         |   0    |   B   | Success, No Errors.                              | 
+   | 0x01         |   1    |   R   | Unspecified Error.                               | 
+   | 0x02         |   1    |   R   | Unable to send file due to resource constraints. | 
+   | 0x03         |   1    |   S   | Unable to receive file due to resource           | 
+   |              |        |       | constraints.                                     | 
+   | 0x04         |   1    |   R   | File not found.                                  | 
+   | 0x05         |   1    |   B   | Access Denied.                                   | 
+   | 0x06         |   1    |   B   | Unknown Id field for transaction.                | 
+   | 0x07         |   0    |   R   | Did not delete file.                             | 
+   | 0x08         |   1    |   S   | File length is longer than receiver can support. | 
+   | 0x09         |   1    |   S   | File offset descriptors do not match expected    | 
+   |              |        |       | use or file length.                              | 
+   | 0x0A         |   1    |   B   | Unsupported Saratoga packet type received.       | 
+   | 0x0B         |   1    |   R   | Unsupported Request Type received.               | 
+   | 0x0C         |   1    |   B   | REQUEST is now terminated due to an internal     | 
+   |              |        |       | timeout.                                         | 
+   | 0x0D         |   1    |   S   | DATA flag bits describing transfer have changed  | 
+   |              |        |       | unexpectedly.                                    | 
+   | 0x0E         |   1    |   S   | Receiver is no longer interested in receiving    | 
+   |              |        |       | this file.                                       | 
+   | 0x0F         |   1    |   R   | File is in use.                                  | 
+   | 0x10         |   1    |   S   | METADATA required before transfer can be         | 
+   |              |        |       | accepted.                                        | 
+   | 0x11         |   0    |   B   | A STATUS error message has been received         | 
+   |              |        |       | unexpectedly, so REQUEST is terminated.          | 
+   +--------------+--------+-------+--------------------------------------------------+ 
+	* Rcvd by - indicates whether a Sender, Receiver or Both ('S', 'R' or 'B') will 
+		     be the recipient of this status error.
+
+   Transaction completed packet:
+	1) Bit 14 set to '0', indicating complete list of holes.
+	2) Bit 15 set to '1', indicating voluntarily set packet.
+	3) 'In_Response_To' field set to last byte of file.
+	4) Hole pair list is empty.
+ Directory Entry Format
+
+    0                   1                   2                   3 
+   |0 1 2 3|4 5 6 7|8 9 0 1|2 3 4 5|6 7 8 9|0 1 2 3|4 5 6 7|8 9 0 1|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |1|       Properties            [        Size (descriptor)      ]         
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |                          Mtime                                | 
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |                          Ctime                                | 
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+   |                                                               / 
+   +                                                               / 
+   /                                                               / 
+   /           File Path (max 1024 octets,variable length)         / 
+   /                                                          ... // 
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-// 
+
+   +------------+----------------------------------------------------------------------------------+ 
+   | field      | description                                                                      | 
+   +------------+----------------------------------------------------------------------------------+ 
+   | Properties | if set, bit 7 of this field indicates that the entry corresponds to a directory. | 
+   |            | Bit 6, if set, indicates that the file is "special".  A special file may not be  |
+   |            | directly transferable as it corresponds to a symbolic link, a named pipe, a      | 
+   |            | device node, or some other "special" filesystem object.  A file-sender may simply|
+   |            | choose not to include these types of files in the results of a _getdir_ request. | 
+   |            | Bits 8 and 9 are flags that indicate the width of the following descriptor field | 
+   |            | that gives file size.  Bit 10 indicates that the file is to be handled by        | 
+   |            | Saratoga as a bundle, and passed to a bundle agent.                              | 
+   | Size       | the size of each file or directory in octets.  This is a descriptor, varying as  | 
+   |            | needed in each entry for the size of the file.  For convenience in the figure, it| 
+   |            | is shown here as a 16-bit descriptor for a small file.                           | 
+   | Mtime      | a timestamp showing when the file or directory was modified.                     |                                       
+   | Ctime      | a timestamp of the last status change for this file or directory.                |                                        
+   | File Path  | contains the file's name relative within the requested path of the _getdir_      |
+   |            | a transaction, maximum of 1024-octet UTF-8 string, that is  null-terminated to   |                      
+   |            | to indicate the beginning of the next directory entry in _getdir_ results        |
+   +------------+----------------------------------------------------------------------------------+
+
+   +-------+-------+-------------------------------------------------+ 
+   | Bit 6 | Bit 7 | Properties conveyed                             |
+   +-------+-------+-------------------------------------------------+ 
+   | 0     | 0     | normal file.                                    |
+   | 0     | 1     | normal directory.                               |
+   | 1     | 0     | special file.                                   |
+   | 1     | 1     | special directory.                              |
+   +-------+-------+-------------------------------------------------+ 
+   | Bit 8 | Bit 9 | Properties conveyed                             | 
+   +-------+-------+-------------------------------------------------+ 
+   | 0     | 0     | File size is indicated in a 16-bit descriptor.  | 
+   | 0     | 1     | File size is indicated in a 32-bit descriptor.  | 
+   | 1     | 0     | File size is indicated in a 64-bit descriptor.  | 
+   | 1     | 1     | File size is indicated in a 128-bit descriptor. | 
+   +-------+-------+-------------------------------------------------+ 
+   +--------+--------------------------------------------------------------------------+ 
+   | Bit 10 | Properties conveyed                                                      | 
+   +--------+--------------------------------------------------------------------------+ 
+   | 0      | File really is a file.                                                   | 
+   | 1      | File is to be treated as a bundle.                                       | 
+   +--------+--------------------------------------------------------------------------+ 
+   | Bit 13 | Use                                                                      | 
+   +--------+--------------------------------------------------------------------------+ 
+   | 0      | This file's content MUST be delivered reliably without errors using UDP. | 
+   | 1      | This file's content MAY be delivered unreliably, or partly unreliably,   |
+   |        | where errors are tolerated, using UDP-Lite.                              |
+   +--------+--------------------------------------------------------------------------+ 
